@@ -1,0 +1,436 @@
+/* ---------- screen styles ---------- */
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+  margin: 0;
+  padding: 20px 0;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: white;
+  padding: 20px 30px 30px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 25px;
+}
+
+h2 {
+  margin-top: 30px;
+  margin-bottom: 10px;
+}
+
+form {
+  display: grid;
+  grid-gap: 12px;
+  margin-bottom: 25px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+input[type="text"],
+input[type="tel"],
+input[type="number"],
+input[type="password"],
+input[type="time"],
+textarea {
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.readonly input {
+  background-color: #f9f9f9;
+}
+
+button {
+  margin-top: 8px;
+  padding: 10px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+button:hover {
+  background-color: #218838;
+}
+
+/* ----- receipt box ----- */
+
+#receipt {
+  background: #f9f9f9;
+  padding: 18px 20px 22px;
+  border-radius: 10px;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+  margin-top: 20px;
+}
+
+/* tightened heading spacing */
+#receipt h2 {
+  margin: 0;
+  padding: 0;
+  line-height: 1.05;
+}
+
+/* second line directly under first */
+#receipt h2 + h2 {
+  margin-top: -3px;
+}
+
+#receipt p {
+  margin: 3px 0;
+}
+
+.receipt-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.receipt-header .tagline {
+  font-size: 12px;
+  color: #555;
+  margin-top: 2px;
+}
+
+.receipt-header img {
+  max-width: 80px;
+  margin-bottom: 4px;
+}
+
+.receipt-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.receipt-meta .left,
+.receipt-meta .right {
+  width: 48%;
+}
+
+.receipt-meta div {
+  margin: 1px 0;
+}
+
+.receipt-section {
+  font-size: 13px;
+  margin: 4px 0;
+}
+
+.receipt-section strong {
+  display: inline-block;
+  min-width: 65px;
+}
+
+.receipt-table-wrapper {
+  margin-top: 8px;
+}
+
+.receipt-footer {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* ----- tables for reports ------ */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+/* Receipt-specific table layout */
+#receipt table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+
+#receipt table th,
+#receipt table td {
+  padding: 2px 4px;
+}
+
+/* Item column wide */
+#receipt table th:nth-child(1),
+#receipt table td:nth-child(1) {
+  width: 55%;
+  text-align: left;
+}
+
+/* AED */
+#receipt table th:nth-child(2),
+#receipt table td:nth-child(2) {
+  width: 15%;
+  text-align: right;
+}
+
+/* VAT */
+#receipt table th:nth-child(3),
+#receipt table td:nth-child(3) {
+  width: 15%;
+  text-align: right;
+}
+
+/* Total */
+#receipt table th:nth-child(4),
+#receipt table td:nth-child(4) {
+  width: 15%;
+  text-align: right;
+}
+
+thead {
+  background-color: #f0f0f0;
+}
+
+th,
+td {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+tbody tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+/* ----- login screen + header ----- */
+
+.login-container {
+  max-width: 420px;
+}
+
+.error-message {
+  color: #c0392b;
+  font-size: 13px;
+  min-height: 16px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.app-header h1 {
+  margin-bottom: 0;
+}
+
+.logout-btn {
+  background-color: #dc3545;
+}
+
+.logout-btn:hover {
+  background-color: #c82333;
+}
+
+/* ----- alert box ----- */
+
+.alert-box {
+  display: none;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background-color: #ffeeba;
+  color: #856404;
+  border: 1px solid #ffeeba;
+  font-size: 14px;
+}
+
+/* small buttons in tables */
+
+.table-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  margin-right: 4px;
+}
+
+.table-btn.edit {
+  background-color: #007bff;
+}
+
+.table-btn.edit:hover {
+  background-color: #0069d9;
+}
+
+.table-btn.delete {
+  background-color: #dc3545;
+}
+
+.table-btn.delete:hover {
+  background-color: #c82333;
+}
+
+/* ---------- dashboard / modules ---------- */
+
+.dashboard-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dashboard-card {
+  background: #f8f9fa;
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.dashboard-card h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.dashboard-card p {
+  margin: 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.dashboard-card.active {
+  border-color: #28a745;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transform: translateY(-1px);
+}
+
+.module-panel {
+  display: none;
+}
+
+/* staff stats cards */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: #555;
+}
+
+.stat-value {
+  display: block;
+  font-size: 20px;
+  font-weight: bold;
+  margin-top: 4px;
+}
+
+.staff-inside {
+  margin-bottom: 16px;
+}
+
+.staff-inside .section-title {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+.staff-inside table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.staff-inside th,
+.staff-inside td {
+  border: 1px solid #ddd;
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.staff-inside th {
+  background: #f1f1f1;
+}
+
+/* ---------- PRINT STYLES ---------- */
+
+/* Define paper size for POS roll */
+@page {
+  size: 80mm auto;
+  margin: 0;
+}
+
+
+@media print {
+
+  /* hide everything */
+  body * {
+    visibility: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  html, body {
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* show only the receipt */
+  #receipt,
+  #receipt * {
+    visibility: visible !important;
+  }
+
+  #receipt {
+    width: 80mm !important;
+    padding: 5px !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+
+    /* ⭐ FORCE PRINTING AT THE TOP ⭐ */
+    position: absolute !important;
+    top: 0 !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    margin: 0 !important;
+  }
+
+  #printBtn {
+    display: none !important;
+  }
+}
+
