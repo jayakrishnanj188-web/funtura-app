@@ -121,19 +121,10 @@ function showAlert(message) {
   }, 3000);
 }
 
-function loadRecords() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    records = [];
-    return;
-  }
-  try {
-    records = JSON.parse(raw);
-    normalizeRecords();
-  } catch (err) {
-    console.error("Failed to parse records from localStorage:", err);
-    records = [];
-  }
+// main loader now delegates to Google Sheet (with fallback)
+async function loadRecords() {
+  // primary source is Google Sheet; falls back to localStorage on error
+  await loadRecordsFromSheet();
 }
 
 function saveRecords() {
@@ -150,14 +141,6 @@ function findRecordIndexById(id) {
   return records.findIndex((r) => r.id === id);
 }
 
-// function generateInvoiceNo() {
-//   const now = new Date();
-//   const y = now.getFullYear().toString().slice(-2);
-//   const m = String(now.getMonth() + 1).padStart(2, "0");
-//   const d = String(now.getDate()).padStart(2, "0");
-//   const t = String(now.getTime()).slice(-4);
-//   return `INV-${y}${m}${d}${t}`;
-// }
 function generateInvoiceNo() {
   const STORAGE_KEY = "INVOICE_COUNTER";
 
@@ -517,7 +500,7 @@ function findUser(username, password) {
   );
 }
 
-function handleLogin(event) {
+async function handleLogin(event) {
   event.preventDefault();
   const username = loginUserInput.value.trim();
   const password = loginPassInput.value.trim();
@@ -534,7 +517,7 @@ function handleLogin(event) {
   loginScreen.style.display = "none";
   appContainer.style.display = "block";
 
-  loadRecords();
+  await loadRecords();
   applyRoleUI(currentUser.role);
   renderReports();
 }
@@ -547,7 +530,7 @@ function handleLogout() {
   loginForm.reset();
 }
 
-function checkAutoLogin() {
+async function checkAutoLogin() {
   const raw = localStorage.getItem(LOGIN_KEY);
   if (!raw) return;
   try {
@@ -556,7 +539,9 @@ function checkAutoLogin() {
     currentUser = user;
     loginScreen.style.display = "none";
     appContainer.style.display = "block";
-    loadRecords();
+
+    // this now loads from Google Sheet
+    await loadRecords();
     applyRoleUI(currentUser.role);
     renderReports();
   } catch (err) {
@@ -613,6 +598,68 @@ function printReceipt(record) {
 
   // make sure the receipt is visible before printing
   receiptDiv.style.display = "block";
+}
+
+//Add a loader from Google Sheet
+
+// Load records from Google Sheet instead of only from localStorage
+async function loadRecordsFromSheet() {
+  try {
+    const res = await fetch(SHEET_WEBHOOK_URL + "?action=list");
+    const data = await res.json();
+
+    // data is { records: [...] }
+    const sheetRecs = data.records || data;
+
+    records = sheetRecs.map((r) => {
+      return {
+        // use invoiceNo as a stable id if there is no separate "id" column
+        id: r.invoiceNo || Date.now() + Math.random(),
+
+        dateISO: r.dateISO,
+        timeSaved: r.time || "",
+        childName: r.childName,
+        parentPhone: r.parentPhone,
+        timeIn: r.timeIn,
+        timeOut: r.timeOut,
+        instruction: r.instruction || "",
+        netAmount: Number(r.netAmount || 0),
+        vatAmount: Number(r.vatAmount || 0),
+        totalAmount: Number(r.totalAmount || 0),
+        invoiceNo: r.invoiceNo,
+        trnNo: r.trnNo || "",
+        staffUser: r.staffUser || "",
+        // if you later add isClosed / clearedAt columns, map them here too
+        isClosed: r.isClosed === true || r.isClosed === "TRUE",
+        clearedAt: r.clearedAt || null,
+      };
+    });
+
+    normalizeRecords(); // keep your helper
+    saveRecords(); // optional cache
+    renderReports();
+    updateStats();
+  } catch (err) {
+    console.error("Failed to load records from Sheet:", err);
+    // fallback to localStorage if fetch fails
+    loadRecordsFromLocal();
+  }
+}
+
+// old local loader, renamed
+function loadRecordsFromLocal() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    records = [];
+    return;
+  }
+  try {
+    records = JSON.parse(raw);
+    normalizeRecords();
+  } catch (err) {
+    console.error("Failed to parse records from localStorage:", err);
+    records = [];
+  }
 }
 
 function handleFormSubmit(e) {
@@ -697,7 +744,6 @@ function handleFormSubmit(e) {
   printReceipt(record);
   setTimeout(() => window.print(), 200);
 
-  //if (timeInInput) timeInInput.value = new Date().toTimeString().slice(0, 5);
   updateCurrentDateTime();
   refreshTimeIn();
   checkAutoLogin();
@@ -829,7 +875,6 @@ financialReportBody.addEventListener("click", (event) => {
 setInterval(updateCurrentDateTime, 60 * 1000);
 
 updateCurrentDateTime();
-// if (timeInInput) timeInInput.value = new Date().toTimeString().slice(0, 5);
 updateCurrentDateTime();
 refreshTimeIn();
 checkAutoLogin();
