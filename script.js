@@ -18,39 +18,38 @@ const VALID_USERS = [
   { username: "Kausar@intex.com", password: "KausarIntex03", role: "staff" },
 ];
 
-let currentUser = null;
-let records = [];
+let currentUser = null; // {username, role}
+let records = []; // main in-memory array of visits
 
 // ====== DOM REFS ======
 
 // login
 const loginScreen = document.getElementById("login-screen");
+const appContainer = document.getElementById("app");
 const loginForm = document.getElementById("login-form");
 const loginUserInput = document.getElementById("loginUser");
 const loginPassInput = document.getElementById("loginPassword");
 const togglePassword = document.getElementById("togglePassword");
-
-// main app
-const appContainer = document.getElementById("app");
 const logoutBtn = document.getElementById("logoutBtn");
 
-// in-app alert
-const alertBox = document.getElementById("alertBox");
-
 // payment form
-const form = document.getElementById("payment-form");
 const childNameInput = document.getElementById("childName");
 const parentPhoneInput = document.getElementById("parentPhone");
 const amountInput = document.getElementById("amount");
-const currentDateTime = document.getElementById("currentDateTime");
+const currentDateTimeInput = document.getElementById("currentDateTime");
 const timeInInput = document.getElementById("timeIn");
 const timeOutInput = document.getElementById("timeOut");
 const instructionInput = document.getElementById("instruction");
+const printButton = document.getElementById("printButton");
+// Missing elements from old code – now define them correctly
+const kidsInsideScreen = document.getElementById("module-staff-live");
+const reportScreen = document.getElementById("module-live");
+const financialScreen = document.getElementById("module-finance");
 
-// staff stats & list
-const staffStatsRow = document.getElementById("staff-stats");
-const kidsInsideEl = document.getElementById("kidsInsideCount");
-const kidsOverdueEl = document.getElementById("kidsOverdueCount");
+// For overdue popup tracking
+const alertedOverdueIds = new Set();
+
+// staff live view
 const staffInsideWrapper = document.getElementById("staffInside");
 const staffInsideBody = document.getElementById("staffInsideBody");
 
@@ -73,6 +72,13 @@ const moduleStaffLive = document.getElementById("module-staff-live");
 const moduleLive = document.getElementById("module-live");
 const moduleFinance = document.getElementById("module-finance");
 
+// stats
+const kidsInsideEl = document.getElementById("kidsInsideCount");
+const kidsOverdueEl = document.getElementById("kidsOverdueCount");
+
+// simple banner alert
+const alertBox = document.getElementById("alertBox");
+
 // ====== DASHBOARD MODULE HANDLING ======
 
 function showModule(name) {
@@ -82,23 +88,17 @@ function showModule(name) {
     moduleLive,
     moduleFinance,
   ];
-  const allCards = [cardPayment, cardStaffLive, cardLive, cardFinance];
-
   allModules.forEach((m) => {
-    if (!m) return;
-    m.style.display = m.dataset.module === name ? "block" : "none";
+    if (m) m.style.display = "none";
   });
 
-  allCards.forEach((c) => {
-    if (!c) return;
-    c.classList.toggle("active", c.dataset.target === name);
-  });
-
-  // 🔥 IMPORTANT: update Time In every time Payment is opened
-  if (name === "payment") {
-    updateCurrentDateTime();
-    refreshTimeIn();
-  }
+  if (name === "payment" && modulePayment)
+    modulePayment.style.display = "block";
+  if (name === "staff-live" && moduleStaffLive)
+    moduleStaffLive.style.display = "block";
+  if (name === "live" && moduleLive) moduleLive.style.display = "block";
+  if (name === "finance" && moduleFinance)
+    moduleFinance.style.display = "block";
 }
 
 if (cardPayment)
@@ -113,6 +113,10 @@ if (cardFinance)
 
 let alertTimeout;
 function showAlert(message) {
+  if (!alertBox) {
+    alert(message);
+    return;
+  }
   alertBox.textContent = message;
   alertBox.style.display = "block";
   clearTimeout(alertTimeout);
@@ -121,10 +125,19 @@ function showAlert(message) {
   }, 3000);
 }
 
-// main loader now delegates to Google Sheet (with fallback)
-async function loadRecords() {
-  // primary source is Google Sheet; falls back to localStorage on error
-  await loadRecordsFromSheet();
+function loadRecordsFromLocal() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) {
+    records = [];
+    return;
+  }
+  try {
+    records = JSON.parse(raw);
+    normalizeRecords();
+  } catch (e) {
+    console.error("Failed to parse saved records:", e);
+    records = [];
+  }
 }
 
 function saveRecords() {
@@ -133,86 +146,52 @@ function saveRecords() {
 
 function normalizeRecords() {
   records.forEach((r) => {
+    if (typeof r.id === "undefined") {
+      r.id = r.invoiceNo || Date.now() + Math.random();
+    }
     if (typeof r.isClosed === "undefined") r.isClosed = false;
   });
 }
 
 function findRecordIndexById(id) {
-  return records.findIndex((r) => r.id === id);
+  const target = String(id);
+  return records.findIndex((r) => String(r.id) === target);
 }
 
 function generateInvoiceNo() {
-  const STORAGE_KEY = "INVOICE_COUNTER";
-
   const now = new Date();
-  const year2 = now.getFullYear().toString().slice(-2); // "25" for 2025
+  const y = now.getFullYear().toString().slice(-2);
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
 
-  // read previous counter
-  let counter;
-  try {
-    counter = JSON.parse(localStorage.getItem(STORAGE_KEY));
-  } catch (e) {
-    counter = null;
-  }
+  const key = "invoiceCounter:" + `${y}${m}${d}`;
+  let n = parseInt(localStorage.getItem(key) || "0", 10);
+  n += 1;
+  localStorage.setItem(key, String(n).padStart(3, "0"));
+  const seq = String(n).padStart(3, "0");
 
-  let nextSeq;
-
-  if (!counter || counter.year !== year2) {
-    // new year OR nothing stored yet → start from 1
-    nextSeq = 1;
-  } else {
-    // same year → increment
-    nextSeq = (counter.seq || 0) + 1;
-  }
-
-  // save back to localStorage
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({ year: year2, seq: nextSeq })
-  );
-
-  // 4-digit padded sequence
-  const paddedSeq = String(nextSeq).padStart(4, "0");
-
-  // final format: FUN0001/25
-  return `FUN${paddedSeq}/${year2}`;
-}
-
-function updateCurrentDateTime() {
-  const now = new Date();
-  if (currentDateTime) currentDateTime.value = now.toLocaleString();
-}
-
-function refreshTimeIn() {
-  if (!timeInInput) return;
-  const now = new Date();
-  // HH:MM in 24h format
-  timeInInput.value = now.toTimeString().slice(0, 5);
+  return `FUN${seq}/${y}`;
 }
 
 function timeToMinutes(t) {
-  if (!t || typeof t !== "string") return null;
-  const [h, m] = t.split(":").map(Number);
+  if (!t) return null;
+  const parts = t.split(":");
+  if (parts.length < 2) return null;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
   if (isNaN(h) || isNaN(m)) return null;
   return h * 60 + m;
 }
 
-//time calculation
-
-function formatPlayItem(timeIn, timeOut) {
+function diffTimeHuman(timeIn, timeOut) {
   const minIn = timeToMinutes(timeIn);
   const minOut = timeToMinutes(timeOut);
-
-  if (minIn == null || minOut == null || minOut <= minIn) {
-    return "Playing";
-  }
-
-  const diff = minOut - minIn; // minutes
+  if (minIn == null || minOut == null || minOut <= minIn) return "";
+  const diff = minOut - minIn;
   const hours = Math.floor(diff / 60);
   const mins = diff % 60;
 
   if (hours > 0 && mins === 0) {
-    // exact hours
     return `Playing for ${hours} hr${hours > 1 ? "s" : ""}`;
   } else if (hours > 0 && mins > 0) {
     return `Playing for ${hours} hr ${mins} min`;
@@ -222,36 +201,33 @@ function formatPlayItem(timeIn, timeOut) {
 }
 
 function isValidChildName(name) {
-  // letters, spaces and basic punctuation like .-' allowed, at least 2 characters
-  const trimmed = name.trim();
-  if (trimmed.length < 2) return false;
-  const re = /^[A-Za-z\s.'-]+$/;
-  return re.test(trimmed);
+  return /^[A-Za-z .'-]{2,}$/.test(name.trim());
 }
 
 function isValidPhone(phone) {
-  const trimmed = phone.trim();
-
-  // must not be empty
-  if (!trimmed) return false;
-
-  // must be digits only
-  if (!/^\d+$/.test(trimmed)) return false;
-
-  // must be exactly 10 digits
-  if (trimmed.length !== 10) return false;
-
-  // must start with "05"
+  const trimmed = phone.replace(/\s+/g, "");
+  if (!/^\d{10}$/.test(trimmed)) return false;
   if (!trimmed.startsWith("05")) return false;
-
   return true;
 }
 
+// works with either "HH:MM" or full ISO from Sheet
 function isTimeOver(rec, now = new Date()) {
   if (!rec.timeOut) return false;
+
   const baseISO = rec.dateISO || new Date().toISOString();
   const dateStr = baseISO.split("T")[0];
-  const end = new Date(dateStr + "T" + rec.timeOut + ":00");
+
+  let end;
+
+  if (/^\d{1,2}:\d{2}$/.test(rec.timeOut)) {
+    end = new Date(`${dateStr}T${rec.timeOut}:00`);
+  } else {
+    end = new Date(rec.timeOut);
+  }
+
+  if (isNaN(end.getTime())) return false;
+
   return end <= now;
 }
 
@@ -277,46 +253,131 @@ function updateStats() {
 }
 
 function countActiveKids() {
-  return records.filter((r) => !r.isClosed).length;
+  const now = new Date();
+  return records.filter(
+    (r) => r.timeIn && r.timeOut && !r.isClosed && !isTimeOver(r, now)
+  ).length;
 }
 
 function checkCapacityBeforeAdd() {
   const active = countActiveKids();
-  if (active >= 25) {
-    showAlert(
-      "Maximum capacity reached (25 kids). Please wait before adding new entry."
+  if (active >= 30) {
+    alert(
+      "Maximum capacity reached (30 kids inside). Please clear kids before adding more."
     );
     return false;
   }
   return true;
 }
 
-// ====== SHEET HELPERS ======
+function refreshTimeIn() {
+  const now = new Date();
+  const time = now.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  if (timeInInput) timeInInput.value = time;
+}
+
+function updateCurrentDateTime() {
+  const now = new Date();
+  if (currentDateTimeInput) {
+    const formatted = now.toLocaleString("en-GB", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    currentDateTimeInput.value = formatted;
+  }
+}
+
+// ====== GOOGLE SHEETS SYNC ======
+// Convert Sheet time (e.g. "1899-12-30T06:23:48.000Z") or "HH:MM:SS" to "HH:MM"
+function parseSheetTime(value) {
+  if (!value) return "";
+
+  // If it looks like an ISO datetime, try to parse
+  const d = new Date(value);
+  if (!isNaN(d.getTime())) {
+    return d.toTimeString().slice(0, 5); // "HH:MM"
+  }
+
+  // If it's already something like "HH:MM" or "HH:MM:SS"
+  const m = String(value).match(/^(\d{1,2}:\d{2})/);
+  if (m) return m[1];
+
+  // Fallback – just return the raw value
+  return value;
+}
+
+async function loadRecordsFromSheet() {
+  try {
+    const res = await fetch(`${SHEET_WEBHOOK_URL}?action=list`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    const sheetRecs = data.records || data;
+
+    records = sheetRecs.map((r) => {
+      return {
+        id: r.invoiceNo || Date.now() + Math.random(),
+        dateISO: r.dateISO,
+        timeSaved: r.time || "",
+        childName: r.childName,
+        parentPhone: r.parentPhone,
+        // ⬇️ use the parser here
+        timeIn: parseSheetTime(r.timeIn),
+        timeOut: parseSheetTime(r.timeOut),
+        instruction: r.instruction || "",
+        netAmount: Number(r.netAmount || 0),
+        vatAmount: Number(r.vatAmount || 0),
+        totalAmount: Number(r.totalAmount || 0),
+        invoiceNo: r.invoiceNo,
+        trnNo: r.trnNo || "",
+        staffUser: r.staffUser || "",
+        isClosed: r.isClosed === true || r.isClosed === "TRUE",
+        clearedAt: r.clearedAt || null,
+      };
+    });
+
+    normalizeRecords();
+    saveRecords();
+    renderReports();
+    updateStats();
+  } catch (err) {
+    console.error("Failed to load records from Sheet:", err);
+    loadRecordsFromLocal();
+    renderReports();
+    updateStats();
+  }
+}
 
 function sendToSheet(record) {
-  if (!SHEET_WEBHOOK_URL || SHEET_WEBHOOK_URL === "YOUR_WEB_APP_URL_HERE") {
-    console.warn(
-      "SHEET_WEBHOOK_URL not configured. Skipping Google Sheet logging."
-    );
+  if (!SHEET_WEBHOOK_URL || SHEET_WEBHOOK_URL === "YOUR_WEB_APP_URL_HERE")
     return;
-  }
 
   const payload = {
     action: "create",
-    dateISO: record.dateISO,
-    date: new Date(record.dateISO).toLocaleDateString(),
-    time: record.timeSaved || "",
+    date: record.dateISO,
+    time: record.timeSaved,
     invoiceNo: record.invoiceNo,
     trnNo: record.trnNo,
     childName: record.childName,
     parentPhone: record.parentPhone,
     timeIn: record.timeIn,
     timeOut: record.timeOut,
-    instruction: record.instruction || "",
+    instruction: record.instruction,
     netAmount: record.netAmount,
     vatAmount: record.vatAmount,
     totalAmount: record.totalAmount,
-    staffUser: record.staffUser || "",
+    staffUser: record.staffUser,
+    isClosed: record.isClosed ? true : false,
+    clearedAt: record.clearedAt || "",
   };
 
   fetch(SHEET_WEBHOOK_URL, {
@@ -324,7 +385,7 @@ function sendToSheet(record) {
     mode: "no-cors",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  }).catch((err) => console.error("Failed to send to Google Sheet:", err));
+  }).catch((err) => console.error("Failed to send to Sheet:", err));
 }
 
 function updateSheetRecord(record) {
@@ -334,16 +395,19 @@ function updateSheetRecord(record) {
   const payload = {
     action: "update",
     invoiceNo: record.invoiceNo,
-    trnNo: record.trnNo || "",
+    trnNo: record.trnNo,
     childName: record.childName,
     parentPhone: record.parentPhone,
     timeIn: record.timeIn,
     timeOut: record.timeOut,
-    instruction: record.instruction || "",
+    instruction: record.instruction,
     netAmount: record.netAmount,
     vatAmount: record.vatAmount,
     totalAmount: record.totalAmount,
-    staffUser: record.staffUser || "",
+    staffUser: record.staffUser,
+    // NEW: sync cleared status to sheet (not delete)
+    isClosed: record.isClosed ? true : false,
+    clearedAt: record.clearedAt || "",
   };
 
   fetch(SHEET_WEBHOOK_URL, {
@@ -351,7 +415,7 @@ function updateSheetRecord(record) {
     mode: "no-cors",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  }).catch((err) => console.error("Failed to UPDATE Google Sheet:", err));
+  }).catch((err) => console.error("Failed to update Sheet:", err));
 }
 
 function deleteSheetRecord(record) {
@@ -368,7 +432,7 @@ function deleteSheetRecord(record) {
     mode: "no-cors",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  }).catch((err) => console.error("Failed to DELETE from Google Sheet:", err));
+  }).catch((err) => console.error("Failed to delete from Sheet:", err));
 }
 
 // ====== RENDERING ======
@@ -377,24 +441,20 @@ function renderReports() {
   if (staffInsideBody) staffInsideBody.innerHTML = "";
   if (adminInsideBody) adminInsideBody.innerHTML = "";
   if (adminOverdueBody) adminOverdueBody.innerHTML = "";
-  financialReportBody.innerHTML = "";
+  if (financialReportBody) financialReportBody.innerHTML = "";
 
   const now = new Date();
 
-  records
-    .slice()
-    .sort((a, b) => new Date(a.dateISO) - new Date(b.dateISO))
-    .forEach((rec) => {
-      const cleared = !!rec.isClosed; // staff cleared / kid left
-      const timeOver = isTimeOver(rec, now); // based on Time Out vs now
-      const active = !cleared && !timeOver; // still inside, not time over
+  records.forEach((rec) => {
+    const cleared = rec.isClosed === true;
+    const timeOver = isTimeOver(rec, now);
+    const active = !cleared && !timeOver;
 
-      // ---------- STAFF: Kids currently inside ----------
-      // show ONLY records that are not cleared
-      if (!cleared && staffInsideBody) {
-        const statusText = timeOver ? "Time over" : "Inside";
-        const trStaff = document.createElement("tr");
-        trStaff.innerHTML = `
+    // STAFF: Kids currently inside
+    if (!cleared && staffInsideBody) {
+      const statusText = timeOver ? "Time over" : "Inside";
+      const trStaff = document.createElement("tr");
+      trStaff.innerHTML = `
           <td>${rec.childName}</td>
           <td>${rec.timeIn || ""}</td>
           <td>${rec.timeOut || ""}</td>
@@ -403,31 +463,37 @@ function renderReports() {
             <button class="btn-staff-remove" data-id="${rec.id}">Remove</button>
           </td>
         `;
-        staffInsideBody.appendChild(trStaff);
-      }
+      staffInsideBody.appendChild(trStaff);
+    }
 
-      // ---------- ADMIN: Report on Screen ----------
-      // 1) Kids currently inside (not cleared, not time over)
-      if (active && adminInsideBody) {
-        const trIn = document.createElement("tr");
-        trIn.innerHTML = `
+    // ADMIN: Kids currently inside (not time over, not cleared)
+    if (active && adminInsideBody) {
+      const trIn = document.createElement("tr");
+      trIn.innerHTML = `
           <td>${rec.childName}</td>
           <td>${rec.timeIn}</td>
           <td>${rec.timeOut || ""}</td>
           <td>${rec.parentPhone}</td>
           <td>${rec.staffUser || ""}</td>
         `;
-        adminInsideBody.appendChild(trIn);
+      adminInsideBody.appendChild(trIn);
+    }
+
+    // ADMIN: Kids time over / cleared history
+    if ((timeOver || cleared) && adminOverdueBody) {
+      const visitDate = new Date(rec.dateISO).toLocaleDateString();
+
+      let statusText;
+      if (cleared) {
+        statusText = "Removed";
+      } else if (timeOver) {
+        statusText = "Time over (not cleared)";
+      } else {
+        statusText = "";
       }
 
-      // 2) Kids time over / cleared history
-      // show every record whose time is over, whether cleared or not
-      if (timeOver && adminOverdueBody) {
-        const visitDate = new Date(rec.dateISO).toLocaleDateString();
-        const statusText = cleared ? "Removed" : "Time over (not cleared)";
-
-        const trOver = document.createElement("tr");
-        trOver.innerHTML = `
+      const trOver = document.createElement("tr");
+      trOver.innerHTML = `
           <td>${visitDate}</td>
           <td>${rec.childName}</td>
           <td>${rec.timeIn}</td>
@@ -436,231 +502,91 @@ function renderReports() {
           <td>${rec.staffUser || ""}</td>
           <td>${statusText}</td>
         `;
-        adminOverdueBody.appendChild(trOver);
-      }
+      adminOverdueBody.appendChild(trOver);
+    }
 
-      // ---------- FINANCIAL REPORT ----------
-      // always include every record (cleared or not)
+    // ADMIN: Financial report
+    if (financialReportBody) {
       const trFin = document.createElement("tr");
       trFin.innerHTML = `
-        <td>${rec.childName}</td>
-        <td>${rec.parentPhone}</td>
-        <td>${rec.timeIn}</td>
-        <td>${rec.timeOut || ""}</td>
-        <td>${rec.netAmount.toFixed(2)}</td>
-        <td>${rec.totalAmount.toFixed(2)}</td>
-        <td>${rec.staffUser || ""}</td>
-        <td>
-          <button class="btn-edit" data-id="${rec.id}">Edit</button>
-          <button class="btn-delete" data-id="${rec.id}">Delete</button>
-        </td>
-      `;
+          <td>${rec.childName}</td>
+          <td>${rec.parentPhone}</td>
+          <td>${rec.timeIn}</td>
+          <td>${rec.timeOut || ""}</td>
+          <td>${rec.netAmount.toFixed(2)}</td>
+          <td>${rec.totalAmount.toFixed(2)}</td>
+          <td>${rec.staffUser || ""}</td>
+          <td>
+            <button class="btn-edit" data-id="${rec.id}">Edit</button>
+            <button class="btn-delete" data-id="${rec.id}">Delete</button>
+          </td>
+        `;
       financialReportBody.appendChild(trFin);
-    });
+    }
+  });
 
   updateStats();
 }
 
-// ====== LOGIN / ROLE UI ======
+// ====== LOGIN / LOGOUT ======
 
-function applyRoleUI(role) {
-  // hide everything
-  if (cardPayment) cardPayment.style.display = "none";
-  if (cardStaffLive) cardStaffLive.style.display = "none";
-  if (cardLive) cardLive.style.display = "none";
-  if (cardFinance) cardFinance.style.display = "none";
+function handleLogin(e) {
+  e.preventDefault();
 
-  if (modulePayment) modulePayment.style.display = "none";
-  if (moduleStaffLive) moduleStaffLive.style.display = "none";
-  if (moduleLive) moduleLive.style.display = "none";
-  if (moduleFinance) moduleFinance.style.display = "none";
-
-  if (staffStatsRow) staffStatsRow.style.display = "none";
-  if (staffInsideWrapper) staffInsideWrapper.style.display = "none";
-
-  if (role === "admin") {
-    if (cardLive) cardLive.style.display = "block";
-    if (cardFinance) cardFinance.style.display = "block";
-    showModule("live");
-  } else if (role === "staff") {
-    if (cardPayment) cardPayment.style.display = "block";
-    if (cardStaffLive) cardStaffLive.style.display = "block";
-    if (modulePayment) modulePayment.style.display = "block";
-    if (staffStatsRow) staffStatsRow.style.display = "grid";
-    if (staffInsideWrapper) staffInsideWrapper.style.display = "block";
-    showModule("payment");
+  if (!loginUserInput || !loginPassInput) {
+    console.error("Login inputs not found in DOM");
+    alert("Technical error: login form is not correctly loaded.");
+    return;
   }
 
-  updateStats();
-}
+  const username = loginUserInput.value.trim();
+  const password = loginPassInput.value;
 
-function findUser(username, password) {
-  return VALID_USERS.find(
+  const user = VALID_USERS.find(
     (u) => u.username === username && u.password === password
   );
-}
-
-async function handleLogin(event) {
-  event.preventDefault();
-  const username = loginUserInput.value.trim();
-  const password = loginPassInput.value.trim();
-
-  const user = findUser(username, password);
   if (!user) {
-    alert("Invalid credentials. Please try again.");
+    showAlert("Invalid username or password.");
     return;
   }
 
   currentUser = { username: user.username, role: user.role };
   localStorage.setItem(LOGIN_KEY, JSON.stringify(currentUser));
 
-  loginScreen.style.display = "none";
-  appContainer.style.display = "block";
+  if (loginScreen) loginScreen.style.display = "none";
+  if (appContainer) appContainer.style.display = "block";
 
-  await loadRecords();
+  loadRecordsFromSheet();
   applyRoleUI(currentUser.role);
-  renderReports();
 }
 
 function handleLogout() {
   currentUser = null;
   localStorage.removeItem(LOGIN_KEY);
-  appContainer.style.display = "none";
-  loginScreen.style.display = "block";
-  loginForm.reset();
+
+  if (appContainer) appContainer.style.display = "none";
+  if (loginScreen) loginScreen.style.display = "block";
+
+  if (loginForm) loginForm.reset();
 }
 
-async function checkAutoLogin() {
-  const raw = localStorage.getItem(LOGIN_KEY);
-  if (!raw) return;
-  try {
-    const user = JSON.parse(raw);
-    if (!user || !user.username || !user.role) return;
-    currentUser = user;
-    loginScreen.style.display = "none";
-    appContainer.style.display = "block";
-
-    // this now loads from Google Sheet
-    await loadRecords();
-    applyRoleUI(currentUser.role);
-    renderReports();
-  } catch (err) {
-    console.error("Failed to parse login user:", err);
+function applyRoleUI(role) {
+  if (role === "staff") {
+    if (cardPayment) cardPayment.style.display = "block";
+    if (cardStaffLive) cardStaffLive.style.display = "block";
+    if (cardLive) cardLive.style.display = "none";
+    if (cardFinance) cardFinance.style.display = "none";
+    showModule("payment");
+  } else if (role === "admin") {
+    if (cardPayment) cardPayment.style.display = "none";
+    if (cardStaffLive) cardStaffLive.style.display = "none";
+    if (cardLive) cardLive.style.display = "block";
+    if (cardFinance) cardFinance.style.display = "block";
+    showModule("live");
   }
 }
 
-// ====== PAYMENT / PRINT ======
-
-function printReceipt(record) {
-  // helper so we never crash if an element is missing
-  const setText = (id, value) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = value != null && value !== "" ? value : "";
-  };
-
-  const dateObj = record.dateISO ? new Date(record.dateISO) : new Date();
-
-  // top meta
-  setText("receiptDate", dateObj.toLocaleDateString());
-  setText("receiptTime", record.timeSaved || dateObj.toLocaleTimeString());
-  setText("invoiceNo", record.invoiceNo || "");
-  setText("receiptStaff", currentUser ? currentUser.username : "");
-
-  // child / phone / times
-  setText("receiptChild", record.childName || "");
-  setText("receiptPhone", record.parentPhone || "");
-  setText("receiptTimeIn", record.timeIn || "");
-  setText("receiptTimeOut", record.timeOut || "");
-
-  // description & instruction
-  const descText = record.childName
-    ? `Playing for ${record.childName}`
-    : "Playing";
-  setText("description", descText);
-  setText("receiptInstruction", record.instruction || "-");
-
-  // amounts (net, VAT, total)
-  const net = Number(record.netAmount || 0);
-  const vat = Number(record.vatAmount || 0);
-  const tot = Number(record.totalAmount || 0);
-
-  setText("receiptAmount", net.toFixed(2)); // AED column
-  setText("receiptVat", vat.toFixed(2)); // Vat column
-  setText("receiptTotal", tot.toFixed(2)); // Total column
-
-  // item text row (Playing for X hr/min)
-  let itemText = "Playing";
-  if (typeof formatPlayItem === "function") {
-    itemText = formatPlayItem(record.timeIn, record.timeOut);
-  }
-  setText("receiptItem", itemText);
-
-  // make sure the receipt is visible before printing
-  receiptDiv.style.display = "block";
-}
-
-//Add a loader from Google Sheet
-
-// Load records from Google Sheet instead of only from localStorage
-async function loadRecordsFromSheet() {
-  try {
-    const res = await fetch(SHEET_WEBHOOK_URL + "?action=list");
-    const data = await res.json();
-
-    // data is { records: [...] }
-    const sheetRecs = data.records || data;
-
-    records = sheetRecs.map((r) => {
-      return {
-        // use invoiceNo as a stable id if there is no separate "id" column
-        id: r.invoiceNo || Date.now() + Math.random(),
-
-        dateISO: r.dateISO,
-        timeSaved: r.time || "",
-        childName: r.childName,
-        parentPhone: r.parentPhone,
-        timeIn: r.timeIn,
-        timeOut: r.timeOut,
-        instruction: r.instruction || "",
-        netAmount: Number(r.netAmount || 0),
-        vatAmount: Number(r.vatAmount || 0),
-        totalAmount: Number(r.totalAmount || 0),
-        invoiceNo: r.invoiceNo,
-        trnNo: r.trnNo || "",
-        staffUser: r.staffUser || "",
-        // if you later add isClosed / clearedAt columns, map them here too
-        isClosed: r.isClosed === true || r.isClosed === "TRUE",
-        clearedAt: r.clearedAt || null,
-      };
-    });
-
-    normalizeRecords(); // keep your helper
-    saveRecords(); // optional cache
-    renderReports();
-    updateStats();
-  } catch (err) {
-    console.error("Failed to load records from Sheet:", err);
-    // fallback to localStorage if fetch fails
-    loadRecordsFromLocal();
-  }
-}
-
-// old local loader, renamed
-function loadRecordsFromLocal() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    records = [];
-    return;
-  }
-  try {
-    records = JSON.parse(raw);
-    normalizeRecords();
-  } catch (err) {
-    console.error("Failed to parse records from localStorage:", err);
-    records = [];
-  }
-}
+// ====== FORM HANDLING (CREATE TICKET) ======
 
 function handleFormSubmit(e) {
   e.preventDefault();
@@ -677,12 +603,7 @@ function handleFormSubmit(e) {
     showAlert("Please fill all required fields.");
     return;
   }
-  if (!childName || !parentPhone || isNaN(amount) || !timeOut) {
-    showAlert("Please fill all required fields.");
-    return;
-  }
 
-  // extra validation: child name & phone format
   if (!isValidChildName(childName)) {
     showAlert("Please enter a valid child's name (letters and spaces only).");
     childNameInput.focus();
@@ -734,6 +655,7 @@ function handleFormSubmit(e) {
     trnNo,
     staffUser: currentUser ? currentUser.username : "",
     isClosed: false,
+    clearedAt: null,
   };
 
   records.push(record);
@@ -741,16 +663,36 @@ function handleFormSubmit(e) {
   renderReports();
   sendToSheet(record);
 
-  printReceipt(record);
-  setTimeout(() => window.print(), 200);
+  const durationText = diffTimeHuman(timeIn, timeOut);
+  const receiptHtml = `
+    <h3>Funtura</h3>
+    <p>Games S.P.S L.L.C</p>
+    <p>Date: ${new Date(dateISO).toLocaleDateString()}</p>
+    <p>Time: ${timeSaved}</p>
+    <p>Invoice: ${invoiceNo}</p>
+    <p>TRN: ${trnNo}</p>
+    <hr/>
+    <p>Child: ${childName}</p>
+    <p>Phone: ${parentPhone}</p>
+    <p>Time In: ${timeIn}</p>
+    <p>Time Out: ${timeOut}</p>
+    <p>${durationText}</p>
+    <p>Instruction: ${instruction || "-"}</p>
+    <hr/>
+    <p>Net Amount: AED ${netAmount.toFixed(2)}</p>
+    <p>VAT (5%): AED ${vatAmount.toFixed(2)}</p>
+    <p>Total: AED ${totalAmount.toFixed(2)}</p>
+    <p>Staff: ${record.staffUser}</p>
+    <p>Thank you visit again!</p>
+  `;
+  if (receiptDiv) receiptDiv.innerHTML = receiptHtml;
 
-  updateCurrentDateTime();
+  window.print();
+  e.target.reset();
   refreshTimeIn();
-  checkAutoLogin();
-  updateStats();
 }
 
-// ====== ADMIN EDIT / DELETE ======
+// ====== ADMIN: EDIT / DELETE IN FINANCIAL REPORT ======
 
 function editRecord(id) {
   const idx = findRecordIndexById(id);
@@ -758,8 +700,7 @@ function editRecord(id) {
   const rec = records[idx];
 
   const newChild = prompt("Child Name:", rec.childName);
-  if (newChild !== null && newChild.trim() !== "")
-    rec.childName = newChild.trim();
+  if (newChild !== null && newChild.trim() !== "") rec.childName = newChild;
 
   const newPhone = prompt("Parent Phone:", rec.parentPhone);
   if (newPhone !== null && newPhone.trim() !== "")
@@ -808,12 +749,13 @@ function deleteRecord(id) {
 
 // ====== STAFF REMOVE BUTTON + OVERDUE REMINDER ======
 
+// STAFF Remove → mark cleared + UPDATE sheet (no delete)
 if (staffInsideBody) {
   staffInsideBody.addEventListener("click", (e) => {
     const btn = e.target;
     if (!btn.classList.contains("btn-staff-remove")) return;
 
-    const id = Number(btn.dataset.id);
+    const id = btn.dataset.id;
     const idx = findRecordIndexById(id);
     if (idx === -1) return;
 
@@ -821,61 +763,135 @@ if (staffInsideBody) {
     const ok = confirm(`Are you sure you want to clear ${rec.childName}?`);
     if (!ok) return;
 
-    // ✅ Do NOT delete the record – just mark it as cleared
     rec.isClosed = true;
-
-    // (optional) remember when it was cleared – useful later
     rec.clearedAt = new Date().toISOString();
 
     saveRecords();
     renderReports();
+    // IMPORTANT: call update, not delete
+    updateSheetRecord(rec);
   });
 }
 
+// Popup should only bother STAFF, not Admin
+// function overdueReminderTick() {
+//   if (!currentUser || currentUser.role !== "staff") return;
+
+//   const now = new Date();
+//   const overdueKids = records.filter(
+//     (r) => !r.isClosed && r.timeOut && isTimeOver(r, now)
+//   );
+//   if (overdueKids.length > 0) {
+//     const names = overdueKids.map((r) => r.childName).join(", ");
+//     alert(
+//       `Time is over for: ${names}.\nPlease open "Kids Inside" and click Remove to clear them.`
+//     );
+//   }
+// }
+
+// setInterval(overdueReminderTick, 60 * 1000);
+// ===== REAL-TIME OVERDUE POPUP (STAFF ONLY) =====
+
+// runs every 10 seconds, alerts only for newly-overdue kids
 function overdueReminderTick() {
+  // Only staff get this popup, not admin
   if (!currentUser || currentUser.role !== "staff") return;
 
   const now = new Date();
-  const overdueKids = records.filter((r) => !r.isClosed && isTimeOver(r, now));
 
-  if (overdueKids.length > 0) {
-    const names = overdueKids.map((r) => r.childName).join(", ");
-    alert(
-      `Time is over for: ${names}.\nPlease open "Kids Inside" and click Remove to clear them.`
-    );
-  }
+  const newlyOverdue = records.filter((r) => {
+    if (!r.timeOut || r.isClosed) return false;
+    if (!isTimeOver(r, now)) return false;
+
+    // already alerted in this session?
+    return !alertedOverdueIds.has(String(r.id));
+  });
+
+  if (newlyOverdue.length === 0) return;
+
+  const names = newlyOverdue.map((r) => r.childName).join(", ");
+
+  alert(
+    `Time is over for: ${names}.\n` +
+      `Please open "Kids Inside" and click Remove to clear them.`
+  );
+
+  // remember we've alerted for these, so we don't spam again
+  newlyOverdue.forEach((r) => alertedOverdueIds.add(String(r.id)));
 }
 
-setInterval(overdueReminderTick, 60 * 1000);
+// check every 10 seconds
+setInterval(overdueReminderTick, 10 * 1000);
 
 // ====== EVENT LISTENERS & INIT ======
 
-loginForm.addEventListener("submit", handleLogin);
-logoutBtn.addEventListener("click", handleLogout);
+if (loginForm) {
+  loginForm.addEventListener("submit", handleLogin);
+}
 
-togglePassword.addEventListener("click", () => {
-  const type =
-    loginPassInput.getAttribute("type") === "password" ? "text" : "password";
-  loginPassInput.setAttribute("type", type);
-});
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", handleLogout);
+}
 
-form.addEventListener("submit", handleFormSubmit);
+if (togglePassword && loginPassInput) {
+  togglePassword.addEventListener("click", () => {
+    const type =
+      loginPassInput.getAttribute("type") === "password" ? "text" : "password";
+    loginPassInput.setAttribute("type", type);
+  });
+}
 
-financialReportBody.addEventListener("click", (event) => {
-  const target = event.target;
-  if (target.classList.contains("btn-edit")) {
-    const id = Number(target.dataset.id);
-    editRecord(id);
-  } else if (target.classList.contains("btn-delete")) {
-    const id = Number(target.dataset.id);
-    deleteRecord(id);
-  }
-});
+if (printButton) {
+  printButton.addEventListener("click", handleFormSubmit);
+}
 
-setInterval(updateCurrentDateTime, 60 * 1000);
+const paymentForm = document.getElementById("payment-form");
+if (paymentForm) {
+  paymentForm.addEventListener("submit", handleFormSubmit);
+}
 
-updateCurrentDateTime();
+if (financialReportBody) {
+  financialReportBody.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target.classList.contains("btn-edit")) {
+      const id = target.dataset.id;
+      editRecord(id);
+    } else if (target.classList.contains("btn-delete")) {
+      const id = target.dataset.id;
+      deleteRecord(id);
+    }
+  });
+}
+
+setInterval(() => {
+  updateCurrentDateTime();
+  refreshTimeIn();
+}, 60 * 1000);
 updateCurrentDateTime();
 refreshTimeIn();
-checkAutoLogin();
 updateStats();
+loadRecordsFromLocal();
+renderReports();
+
+// ===== AUTO REFRESH EVERY 10 SECONDS =====
+setInterval(() => {
+  try {
+    console.log("Auto-refresh triggered");
+
+    if (!currentUser) return;
+
+    if (kidsInsideScreen.style.display !== "none") {
+      renderReports();
+    }
+
+    if (reportScreen.style.display !== "none") {
+      renderReports();
+    }
+
+    if (financialScreen.style.display !== "none") {
+      renderReports();
+    }
+  } catch (e) {
+    console.error("Auto-refresh error:", e);
+  }
+}, 10000);
