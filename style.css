@@ -434,3 +434,323 @@ tbody tr:nth-child(even) {
   }
 }
 
+/* ===== Enhanced login screen ===== */
+
+/* Full-page background & centering */
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: radial-gradient(circle at top left, #36d1dc 0, #5b86e5 40%, #243b55 100%);
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Login card */
+#login-screen.login-container {
+  width: 420px;
+  max-width: 90vw;
+  padding: 32px 40px 36px;
+  border-radius: 18px;
+  border: none;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+  background: #ffffff;
+}
+
+/* Title */
+#login-screen h1 {
+  margin: 0 0 6px;
+  text-align: center;
+  font-size: 28px;
+  letter-spacing: 0.03em;
+}
+
+/* Small subtitle under the title (generated via CSS) */
+#login-screen h1::after {
+  content: "Kids Play Zone Admin Panel";
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #888;
+}
+
+/* Form layout */
+#login-form {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Labels + inputs */
+#login-form .form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 4px;
+}
+
+#login-form input[type="text"],
+#login-form input[type="password"] {
+  padding: 9px 11px;
+  border-radius: 999px;
+  border: 1px solid #d0d7de;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+  background-color: #f9fafb;
+}
+
+#login-form input[type="text"]:focus,
+#login-form input[type="password"]:focus {
+  border-color: #28a745;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.15);
+}
+
+/* Password eye button */
+.password-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* #togglePassword.toggle-password {
+  width: 40px;
+  height: 36px;
+  border-radius: 999px;
+  border: none;
+  background: #e9ecef;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s ease, transform 0.1s ease;
+} */
+
+/* #togglePassword.toggle-password:hover {
+  background: #dfe3e7;
+  transform: translateY(-1px);
+}
+
+ .toggle-password {
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}*/
+
+.toggle-password:hover {
+  background: #f1f1f1;
+} 
+ .password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-password {
+  width: 28px;
+  height: 28px;
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-size: 14px;   /* icon size */
+  color: #000;       /* eye icon color */
+}
+
+/* .toggle-password:hover {
+  background: #f0f0f0;
+} */
+
+
+
+/* Login button */
+#login-form button[type="submit"] {
+  margin-top: 10px;
+  border-radius: 999px;
+  padding: 11px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #28a745, #20c997);
+  box-shadow: 0 8px 18px rgba(25, 135, 84, 0.35);
+  border: none;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, filter 0.18s ease;
+}
+
+#login-form button[type="submit"]:hover {
+  filter: brightness(1.03);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(25, 135, 84, 0.45);
+}
+
+#login-form button[type="submit"]:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(25, 135, 84, 0.35);
+}
+
+/* Make rest of app still look okay after login */
+#app.container {
+  width: 100%;
+  max-width: 900px;
+  margin: 30px auto;
+}
+
+.login-logo-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.login-logo {
+  height: 52px;
+  width: auto;
+}
+.login-logo {
+  width: 160px;
+  height: auto;
+  object-fit: contain;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  margin-bottom: 6px;
+}
+#login-screen.login-container {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 15px 60px rgba(0,0,0,0.25);
+}
+#login-screen {
+  animation: fadeInUp 0.8s ease;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+body {
+  background: linear-gradient(135deg, #2dd6e2, #4f6be8, #4a4de7);
+  background-size: 400% 400%;
+  animation: gradientMove 12s ease infinite;
+}
+
+@keyframes gradientMove {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+#login-form button[type="submit"] {
+  box-shadow: 0 10px 20px rgba(40,167,69,0.35);
+}
+
+#login-form button[type="submit"]:hover {
+  box-shadow: 0 12px 28px rgba(40,167,69,0.45);
+}
+/* Make sure main app is visible after login */
+/* #app {
+  display: block !important;
+} */
+
+#app.container {
+  width: 100%;
+  max-width: 900px;
+  margin: 40px auto;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 20px 30px 30px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+/* When app is visible, let the content sit a bit lower */
+body.logged-in {
+  align-items: flex-start; /* pushes app towards top instead of exact center */
+}
+
+/* Make sure the main app container has some top margin */
+#app {
+  margin-top: 40px;
+}
+
+.ticket {
+  width: 100%;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  color: #000;
+}
+
+.t-center {
+  text-align: center;
+}
+
+.t-title {
+  font-size: 18px;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.t-subtitle {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.t-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.t-col-left div,
+.t-col-right div {
+  margin-bottom: 2px;
+}
+
+.t-block {
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+  padding: 6px 0;
+  margin: 6px 0;
+}
+
+.t-block div {
+  margin-bottom: 3px;
+}
+
+.t-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.t-table th,
+.t-table td {
+  border-top: 1px solid #000;
+  padding: 4px 0;
+  text-align: center;
+}
+
+.t-footer {
+  margin-top: 8px;
+  font-size: 12px;
+}

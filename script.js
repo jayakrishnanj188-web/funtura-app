@@ -112,11 +112,21 @@ if (cardFinance)
 // ====== HELPERS ======
 
 let alertTimeout;
+
 function showAlert(message) {
+  // If we are still on the login screen (app hidden), use a simple popup
+  if (appContainer && appContainer.style.display === "none") {
+    alert(message);
+    return;
+  }
+
+  // Fallback if alertBox doesn't exist
   if (!alertBox) {
     alert(message);
     return;
   }
+
+  // In-app banner message
   alertBox.textContent = message;
   alertBox.style.display = "block";
   clearTimeout(alertTimeout);
@@ -150,6 +160,24 @@ function normalizeRecords() {
       r.id = r.invoiceNo || Date.now() + Math.random();
     }
     if (typeof r.isClosed === "undefined") r.isClosed = false;
+
+    // 🔹 FIX: ensure dateISO is always a valid ISO string
+    let d = r.dateISO ? new Date(r.dateISO) : null;
+    if (!d || isNaN(d.getTime())) {
+      // try fallbacks from Sheet (if they exist)
+      const rawDate = r.date || r.Date || null;
+      if (rawDate) {
+        const tryD = new Date(rawDate);
+        if (!isNaN(tryD.getTime())) {
+          d = tryD;
+        }
+      }
+    }
+    if (!d || isNaN(d.getTime())) {
+      // final fallback – use "today" so UI never shows "Invalid Date"
+      d = new Date();
+    }
+    r.dateISO = d.toISOString();
   });
 }
 
@@ -323,14 +351,33 @@ async function loadRecordsFromSheet() {
 
     const sheetRecs = data.records || data;
 
+    // 🔹 1) Load any existing local records to preserve cleared/removal info
+    let localMap = new Map();
+    try {
+      const localRaw = localStorage.getItem(STORAGE_KEY);
+      if (localRaw) {
+        const localArr = JSON.parse(localRaw);
+        localArr.forEach((r) => {
+          if (r.invoiceNo) {
+            localMap.set(String(r.invoiceNo), r);
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Failed to read local records for merge:", e);
+    }
+
+    // 🔹 2) Build records from Sheet, but keep local isClosed/clearedAt when present
     records = sheetRecs.map((r) => {
-      return {
+      const key = String(r.invoiceNo || "");
+      const local = localMap.get(key);
+
+      let rec = {
         id: r.invoiceNo || Date.now() + Math.random(),
         dateISO: r.dateISO,
         timeSaved: r.time || "",
         childName: r.childName,
         parentPhone: r.parentPhone,
-        // ⬇️ use the parser here
         timeIn: parseSheetTime(r.timeIn),
         timeOut: parseSheetTime(r.timeOut),
         instruction: r.instruction || "",
@@ -343,6 +390,15 @@ async function loadRecordsFromSheet() {
         isClosed: r.isClosed === true || r.isClosed === "TRUE",
         clearedAt: r.clearedAt || null,
       };
+
+      // 🔹 If locally this record was already cleared, KEEP it cleared
+      if (local && local.isClosed) {
+        rec.isClosed = true;
+        rec.clearedAt =
+          local.clearedAt || rec.clearedAt || new Date().toISOString();
+      }
+
+      return rec;
     });
 
     normalizeRecords();
@@ -553,11 +609,20 @@ function handleLogin(e) {
   currentUser = { username: user.username, role: user.role };
   localStorage.setItem(LOGIN_KEY, JSON.stringify(currentUser));
 
+  // show app container
   if (loginScreen) loginScreen.style.display = "none";
   if (appContainer) appContainer.style.display = "block";
 
-  loadRecordsFromSheet();
+  // always show Payment first so you never end up with an “empty” module area
+  showModule("payment");
+
+  // then apply role-specific visibility (staff vs admin)
   applyRoleUI(currentUser.role);
+
+  // finally, kick off sheet sync (async, errors go to console but won’t break the UI)
+  loadRecordsFromSheet().catch((err) => {
+    console.error("Error loading from sheet:", err);
+  });
 }
 
 function handleLogout() {
@@ -633,7 +698,7 @@ function handleFormSubmit(e) {
   }
 
   const invoiceNo = generateInvoiceNo();
-  const trnNo = "UAE-TRN12345";
+  const trnNo = "--";
 
   const totalAmount = +amount.toFixed(2);
   const netAmount = +(totalAmount / (1 + VAT_RATE)).toFixed(2);
@@ -663,32 +728,89 @@ function handleFormSubmit(e) {
   renderReports();
   sendToSheet(record);
 
+  // const durationText = diffTimeHuman(timeIn, timeOut);
+  // const receiptHtml = `
+  //   <h3>Funtura</h3>
+  //   <p>Games S.P.S L.L.C</p>
+  //   <p>Date: ${new Date(dateISO).toLocaleDateString()}</p>
+  //   <p>Time: ${timeSaved}</p>
+  //   <p>Invoice: ${invoiceNo}</p>
+  //   <p>TRN: ${trnNo}</p>
+  //   <hr/>
+  //   <p>Child: ${childName}</p>
+  //   <p>Phone: ${parentPhone}</p>
+  //   <p>Time In: ${timeIn}</p>
+  //   <p>Time Out: ${timeOut}</p>
+  //   <p>${durationText}</p>
+  //   <p>Instruction: ${instruction || "-"}</p>
+  //   <hr/>
+  //   <p>Net Amount: AED ${netAmount.toFixed(2)}</p>
+  //   <p>VAT (5%): AED ${vatAmount.toFixed(2)}</p>
+  //   <p>Total: AED ${totalAmount.toFixed(2)}</p>
+  //   <p>Staff: ${record.staffUser}</p>
+  //   <p>Thank you visit again!</p>
+  // `;const durationText = diffTimeHuman(timeIn, timeOut);
   const durationText = diffTimeHuman(timeIn, timeOut);
   const receiptHtml = `
-    <h3>Funtura</h3>
-    <p>Games S.P.S L.L.C</p>
-    <p>Date: ${new Date(dateISO).toLocaleDateString()}</p>
-    <p>Time: ${timeSaved}</p>
-    <p>Invoice: ${invoiceNo}</p>
-    <p>TRN: ${trnNo}</p>
-    <hr/>
-    <p>Child: ${childName}</p>
-    <p>Phone: ${parentPhone}</p>
-    <p>Time In: ${timeIn}</p>
-    <p>Time Out: ${timeOut}</p>
-    <p>${durationText}</p>
-    <p>Instruction: ${instruction || "-"}</p>
-    <hr/>
-    <p>Net Amount: AED ${netAmount.toFixed(2)}</p>
-    <p>VAT (5%): AED ${vatAmount.toFixed(2)}</p>
-    <p>Total: AED ${totalAmount.toFixed(2)}</p>
-    <p>Staff: ${record.staffUser}</p>
-    <p>Thank you visit again!</p>
-  `;
-  if (receiptDiv) receiptDiv.innerHTML = receiptHtml;
+  <div class="ticket">
+    
+    <div class="t-center t-title">Funtura</div>
+    <div class="t-center t-subtitle">Games S.P.S L.L.C</div>
 
+    <div class="t-row">
+      <div class="t-col-left">
+        <div><strong>Date:</strong> ${new Date(
+          dateISO
+        ).toLocaleDateString()}</div>
+        <div><strong>Time:</strong> ${timeSaved}</div>
+        <div><strong>Staff:</strong> ${record.staffUser}</div>
+      </div>
+      <div class="t-col-right">
+        <div><strong>Tax Invoice:</strong> ${invoiceNo}</div>
+        <div><strong>TRN:</strong> ${trnNo}</div>
+      </div>
+    </div>
+
+    <div class="t-block">
+      <div><strong>Child:</strong> ${childName}</div>
+      <div><strong>Phone:</strong> ${parentPhone}</div>
+      <div><strong>Time In:</strong> ${timeIn}  <strong>Out:</strong> ${timeOut}</div>
+      <div><strong>Description:</strong> ${durationText}</div>
+      <div><strong>Instruction:</strong> ${instruction || "-"}</div>
+    </div>
+
+    <table class="t-table">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>AED</th>
+          <th>Vat(5%)</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Playing for ${durationText}</td>
+          <td>${netAmount.toFixed(2)}</td>
+          <td>${vatAmount.toFixed(2)}</td>
+          <td>${totalAmount.toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="t-center t-footer">Thank you visit again!</div>
+
+  </div>
+`;
+  //const durationText = diffTimeHuman(timeIn, timeOut);
+  if (receiptDiv) receiptDiv.innerHTML = receiptHtml;
   window.print();
-  e.target.reset();
+
+  // always reset the payment form safely
+  if (paymentForm) {
+    paymentForm.reset();
+  }
+
   refreshTimeIn();
 }
 
@@ -841,9 +963,9 @@ if (togglePassword && loginPassInput) {
   });
 }
 
-if (printButton) {
-  printButton.addEventListener("click", handleFormSubmit);
-}
+// if (printButton) {
+//   printButton.addEventListener("click", handleFormSubmit);
+// }
 
 const paymentForm = document.getElementById("payment-form");
 if (paymentForm) {
