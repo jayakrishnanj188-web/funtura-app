@@ -419,7 +419,7 @@ function sendToSheet(record) {
 
   const payload = {
     action: "create",
-    date: record.dateISO,
+    date: new Date(record.dateISO).toLocaleDateString("en-GB"),
     time: record.timeSaved,
     invoiceNo: record.invoiceNo,
     trnNo: record.trnNo,
